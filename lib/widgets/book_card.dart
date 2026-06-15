@@ -6,11 +6,13 @@ import '../theme/app_theme.dart';
 class BookCard extends StatelessWidget {
   final Book book;
   final VoidCallback onDownload;
+  final VoidCallback? onDelete;
 
   const BookCard({
     super.key,
     required this.book,
     required this.onDownload,
+    this.onDelete,
   });
 
   @override
@@ -65,7 +67,8 @@ class BookCard extends StatelessWidget {
               ),
               Chip(
                 label: Text(sourceLabel),
-                backgroundColor: AppTheme.green,
+                backgroundColor:
+                book.isDefault ? AppTheme.green : AppTheme.pink,
               ),
             ],
           ),
@@ -87,6 +90,25 @@ class BookCard extends StatelessWidget {
               label: const Text('Download'),
             ),
           ),
+          if (!book.isDefault && onDelete != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete),
+                label: const Text('Delete'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.red),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

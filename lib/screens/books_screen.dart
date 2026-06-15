@@ -18,10 +18,13 @@ class BooksScreen extends StatelessWidget {
   Future<void> _openAddBookDialog(BuildContext context) async {
     final wasAdded = await showDialog<bool>(
       context: context,
-      builder: (_) => AddBookDialog(
-        format: format,
-        ageGroup: ageGroup,
-      ),
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return AddBookDialog(
+          format: format,
+          ageGroup: ageGroup,
+        );
+      },
     );
 
     if (wasAdded == true && context.mounted) {
@@ -39,6 +42,50 @@ class BooksScreen extends StatelessWidget {
         content: Text('Demo download: ${book.fileName}'),
       ),
     );
+  }
+
+  Future<void> _deleteBook(BuildContext context, Book book) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete book?'),
+        content: Text('Are you sure you want to delete "${book.title}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDelete != true || !context.mounted) {
+      return;
+    }
+
+    try {
+      await BookService().deleteBook(book);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Book deleted successfully'),
+          ),
+        );
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete book: $error'),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -148,6 +195,9 @@ class BooksScreen extends StatelessWidget {
                         (book) => BookCard(
                       book: book,
                       onDownload: () => _showDownloadDemo(context, book),
+                      onDelete: book.isDefault
+                          ? null
+                          : () => _deleteBook(context, book),
                     ),
                   ),
                   const SizedBox(height: 80),
@@ -180,9 +230,47 @@ class _AddBookDialogState extends State<AddBookDialog> {
 
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _emojiController = TextEditingController(
+    text: '📚',
+  );
+
+  final List<String> _emojiOptions = const [
+    '📚',
+    '📖',
+    '🌈',
+    '🐰',
+    '🦊',
+    '🐻',
+    '🐢',
+    '🦁',
+    '🐶',
+    '🐱',
+    '🦄',
+    '🚀',
+    '⭐',
+    '🌙',
+    '☀️',
+    '🎈',
+    '🎨',
+    '🖍️',
+    '🏰',
+    '🌸',
+    '🍭',
+    '🧸',
+    '🐳',
+    '🦋',
+    '🍄',
+    '🌻',
+  ];
 
   String? _fileName;
   bool _isSaving = false;
+
+  void _chooseEmoji(String emoji) {
+    setState(() {
+      _emojiController.text = emoji;
+    });
+  }
 
   void _chooseDemoFile() {
     final extension = widget.format == 'PDF' ? 'pdf' : 'docx';
@@ -204,6 +292,7 @@ class _AddBookDialogState extends State<AddBookDialog> {
   Future<void> _saveBook() async {
     final title = _titleController.text.trim();
     final description = _descriptionController.text.trim();
+    final emoji = _emojiController.text.trim();
 
     if (title.isEmpty || description.isEmpty) {
       _showMessage('Please fill in the book title and description');
@@ -226,6 +315,7 @@ class _AddBookDialogState extends State<AddBookDialog> {
         format: widget.format,
         description: description,
         fileName: _fileName!,
+        emoji: emoji.isEmpty ? '📚' : emoji,
       );
 
       if (mounted) {
@@ -254,83 +344,174 @@ class _AddBookDialogState extends State<AddBookDialog> {
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
+    _emojiController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppTheme.cream,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(28),
-      ),
-      title: Text(
-        'Upload ${widget.format} Book',
-        textAlign: TextAlign.center,
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Ages ${widget.ageGroup}',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.darkText,
+    final screenSize = MediaQuery.sizeOf(context);
+    final dialogWidth = screenSize.width < 520 ? screenSize.width * 0.9 : 460.0;
+    final dialogMaxHeight = screenSize.height * 0.85;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(16),
+      child: SizedBox(
+        width: dialogWidth,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: dialogMaxHeight,
+          ),
+          child: Material(
+            color: AppTheme.cream,
+            borderRadius: BorderRadius.circular(28),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Upload ${widget.format} Book',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.darkText,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Ages ${widget.ageGroup}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.darkText,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Book title',
+                      prefixIcon: Icon(Icons.title),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _descriptionController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Book description',
+                      prefixIcon: Icon(Icons.description),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _emojiController,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 28),
+                    decoration: const InputDecoration(
+                      labelText: 'Book emoji',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Choose emoji:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.darkText,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 58,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _emojiOptions.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) {
+                        final emoji = _emojiOptions[index];
+                        final isSelected = _emojiController.text == emoji;
+
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(22),
+                          onTap: () => _chooseEmoji(emoji),
+                          child: Container(
+                            width: 52,
+                            height: 52,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: isSelected ? AppTheme.yellow : Colors.white,
+                              borderRadius: BorderRadius.circular(22),
+                              border: Border.all(
+                                color: isSelected
+                                    ? Colors.orange
+                                    : Colors.black12,
+                                width: 2,
+                              ),
+                            ),
+                            child: Text(
+                              emoji,
+                              style: const TextStyle(fontSize: 28),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: _chooseDemoFile,
+                    icon: const Icon(Icons.attach_file),
+                    label: const Text('Choose file demo'),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _fileName == null
+                        ? 'No demo file selected'
+                        : 'Selected: $_fileName',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 22),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: _isSaving
+                              ? null
+                              : () => Navigator.of(context).pop(false),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _isSaving ? null : _saveBook,
+                          child: _isSaving
+                              ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                              : const Text('Add Book'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 18),
-            TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: 'Book title',
-                prefixIcon: Icon(Icons.title),
-              ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: _descriptionController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Book description',
-                prefixIcon: Icon(Icons.description),
-              ),
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: _chooseDemoFile,
-              icon: const Icon(Icons.attach_file),
-              label: const Text('Choose file demo'),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _fileName == null
-                  ? 'No demo file selected'
-                  : 'Selected: $_fileName',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13),
-            ),
-          ],
+          ),
         ),
       ),
-      actionsAlignment: MainAxisAlignment.spaceBetween,
-      actions: [
-        TextButton(
-          onPressed: _isSaving ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _isSaving ? null : _saveBook,
-          child: _isSaving
-              ? const SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          )
-              : const Text('Add Book'),
-        ),
-      ],
     );
   }
 }

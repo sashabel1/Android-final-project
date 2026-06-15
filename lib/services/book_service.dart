@@ -100,6 +100,7 @@ class BookService {
     required String format,
     required String description,
     required String fileName,
+    required String emoji,
   }) async {
     final book = Book(
       id: '',
@@ -107,11 +108,19 @@ class BookService {
       ageGroup: ageGroup,
       format: format,
       description: description,
-      emoji: '📚',
+      emoji: emoji.trim().isEmpty ? '📚' : emoji.trim(),
       fileName: fileName,
       isDefault: false,
     );
 
     await _booksCollection.add(book.toMap(ownerId: _uid));
+  }
+
+  Future<void> deleteBook(Book book) async {
+    if (book.isDefault) {
+      throw Exception('Default books cannot be deleted');
+    }
+
+    await _booksCollection.doc(book.id).delete();
   }
 }
